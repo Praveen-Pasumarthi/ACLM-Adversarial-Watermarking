@@ -1,0 +1,13 @@
+# Ignore Kaggle API credentials
+.kaggle/
+
+# Ignore downloaded datasets and large files
+data/
+
+# Ignore any zip files
+*.zip
+
+# Ignore virtual environments (optional but recommended)
+venv/
+__pycache__/
+*.pyc
