@@ -24,7 +24,6 @@ os.makedirs('./data', exist_ok=True)
 print("📥 Downloading Kaggle dataset (2017-2017)...")
 
 try:
-    # Use the explicitly found path to kaggle.exe
     subprocess.run([
         str(KAGGLE_EXEC), 'datasets', 'download', 
         '-d', 'sabahesaraki/2017-2017', 
@@ -35,5 +34,3 @@ try:
 except subprocess.CalledProcessError as e:
     print(f"❌ Error during Kaggle download: {e}")
     print("Please ensure your .kaggle/kaggle.json file is correct and your API key is valid.")
-
-# --- End of modified script ---
