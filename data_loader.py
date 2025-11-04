@@ -9,7 +9,7 @@ from PIL import Image
 DIV2K_IMAGE_DIR = './data/DIV2K/DIV2K_train_HR/'
 IMAGE_SIZE = 256  # Common size for LDM training, which is divisible by 8 (for VAE)
 BATCH_SIZE = 4
-NUM_WORKERS = 4 
+NUM_WORKERS = 4
 
 # --- 1. PyTorch Dataset ---
 
@@ -67,7 +67,7 @@ def get_data_loader(image_dir=DIV2K_IMAGE_DIR, batch_size=BATCH_SIZE, num_worker
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
-        pin_memory=True
+        pin_memory=False
     )
     
     return data_loader, dataset

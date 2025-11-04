@@ -2,13 +2,14 @@ import torch
 import torch.optim as optim
 import numpy as np
 import os
+from tqdm import tqdm # <--- ADDED TQDM IMPORT
 # Ensure ACLM_Loss is imported correctly, assuming it's been updated in aclm_system.py
-from aclm_system import ACLMSystem, ACLM_Loss, M_BITS
+from aclm_system import ACLMSystem, ACLM_Loss, M_BITS 
 from data_loader import get_data_loader 
 
 # --- Hyperparameters ---
-LEARNING_RATE_ED = 1e-5 # Keep low due to high recovery loss weight
-LEARNING_RATE_A = 1e-6 # Keep A slow
+LEARNING_RATE_ED = 1e-5
+LEARNING_RATE_A = 1e-6 
 NUM_EPOCHS = 10
 LOG_INTERVAL = 100
 IMAGE_HEIGHT = 256
@@ -16,7 +17,7 @@ IMAGE_HEIGHT = 256
 # ----------------------------------------------------------------------
 #                         UTILITY FUNCTIONS (UNCHANGED)
 # ----------------------------------------------------------------------
-
+# ... (generate_random_codeword and calculate_ber functions remain here)
 def generate_random_codeword(batch_size, device):
     """Generates a batch of random binary codewords (M)."""
     M = torch.randint(0, 2, (batch_size, M_BITS)).float().to(device)
@@ -30,16 +31,20 @@ def calculate_ber(M, M_hat):
     
     ber = incorrect_bits / (M.size(0) * M.size(1))
     return ber
-
 # ----------------------------------------------------------------------
 #                           TRAINING LOOP
 # ----------------------------------------------------------------------
 
 def train_aclm():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+        
     print(f"Using device: {device}")
     
-    # This will now trigger the Real VAE download and initialization
     model = ACLMSystem(device=device) 
     train_loader, _ = get_data_loader()
     
@@ -54,7 +59,6 @@ def train_aclm():
     
     model.train()
 
-    # Updated message, as we are now running the full adversarial training
     print("Starting Minimax ACLM Training (Full Adversarial Game)...")
 
     for epoch in range(1, NUM_EPOCHS + 1):
@@ -62,7 +66,11 @@ def train_aclm():
         total_loss_a = 0
         total_ber = 0
         
-        for batch_idx, x in enumerate(train_loader):
+        # --- TQDM PROGRESS BAR ADDED HERE ---
+        # Wrap the data loader to display epoch progress visually
+        epoch_iterator = tqdm(train_loader, desc=f"Epoch {epoch}/{NUM_EPOCHS}", unit="batch")
+        
+        for batch_idx, x in enumerate(epoch_iterator):
             x = x.to(device)
             batch_size = x.size(0)
             
@@ -71,19 +79,15 @@ def train_aclm():
             # ---------------------------------------------------------
             # STEP 1: TRAIN ADVERSARY (A) - MAXIMIZE CORRUPTION
             # ---------------------------------------------------------
-            
-            # We wrap the VAE and Encoder forward pass in no_grad for A's optimization
+            # (Logic remains identical to the previous fixed version)
             with torch.no_grad():
                 z = model.vae.encode(x)
-                # z_tilde is detached here so A doesn't update E
-                z_tilde_detached = model.encoder(z, M).detach() 
+                z_tilde_detached = model.encoder(z, M).detach()
             
-            # A Forward Pass (A is trained to maximize loss using z_tilde_detached)
             z_prime = model.adversary(z_tilde_detached)
             M_hat_a = model.decoder(z_prime)
             
             x_dummy = torch.randn_like(x).to(x.device) 
-            # A's loss uses the corrupted output M_hat_a
             _, L_A_Total, _, _ = ACLM_Loss(M, M_hat_a, x, x_dummy, z, z_tilde_detached) 
             
             optimizer_a.zero_grad()
@@ -99,16 +103,15 @@ def train_aclm():
                 param.requires_grad = False
             
             optimizer_ed.zero_grad() 
-
-            # --- REVERTED TO STANDARD ADVERSARIAL FLOW ---
             
-            # 1. Encode image to get z (no_grad is not needed as VAE is frozen)
-            z = model.vae.encode(x)
+            # 1. Capture original latent z (MUST BE NO_GRAD)
+            with torch.no_grad():
+                z = model.vae.encode(x)
             
-            # 2. Embed Watermark (E) - Gradient active for Encoder
+            # 2. Forward Pass for Encoder (GRADIENT ACTIVE!)
             z_tilde = model.encoder(z, M) 
             
-            # 3. Apply Adversary (A) - Uses A's weights but no gradient flows back to A
+            # 3. Apply Adversary (A) - Uses A's fixed weights
             z_prime = model.adversary(z_tilde) 
 
             # 4. Decode the CORRUPTED latent z_prime
@@ -118,8 +121,7 @@ def train_aclm():
             with torch.no_grad():
                 x_tilde = model.vae.decode(z_tilde)
             
-            # Calculate Loss for E/D (L_E_D_Total)
-            # E/D Loss uses the CORRUPTED M_hat to learn robustness
+            # Calculate Loss for E/D 
             L_E_D_Total, _, L_Fidelity, L_Recovery = ACLM_Loss(M, M_hat, x, x_tilde, z, z_tilde)
             
             L_E_D_Total.backward() 
@@ -131,10 +133,17 @@ def train_aclm():
             total_loss_ed += L_E_D_Total.item()
             total_ber += calculate_ber(M, M_hat)
 
-            if (batch_idx + 1) % LOG_INTERVAL == 0:
+            # ---------------------------------------------------------
+            # LOGGING: Using global batch count for consistent logging
+            # ---------------------------------------------------------
+            current_batch_global = (epoch - 1) * len(train_loader) + batch_idx + 1
+
+            if current_batch_global % LOG_INTERVAL == 0:
                 avg_ber = total_ber / LOG_INTERVAL
-                print(
-                    f"Epoch {epoch}/{NUM_EPOCHS} | Batch {batch_idx+1} | "
+                
+                # Use tqdm's post-logging feature to print the metrics cleanly
+                epoch_iterator.write(
+                    f"Epoch {epoch}/{NUM_EPOCHS} | Batch {current_batch_global} | "
                     f"E/D Loss: {total_loss_ed/LOG_INTERVAL:.4f} | "
                     f"A Loss: {-total_loss_a/LOG_INTERVAL:.4f} | "
                     f"BER: {avg_ber:.4f}"
