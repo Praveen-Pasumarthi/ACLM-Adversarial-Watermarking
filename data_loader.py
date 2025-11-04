@@ -6,7 +6,7 @@ from PIL import Image
 
 # --- Configuration ---
 # Match this to your image folder structure after successful extraction!
-DIV2K_IMAGE_DIR = './data/DIV2K_train_HR/' 
+DIV2K_IMAGE_DIR = './data/DIV2K/DIV2K_train_HR/'
 IMAGE_SIZE = 256  # Common size for LDM training, which is divisible by 8 (for VAE)
 BATCH_SIZE = 4
 NUM_WORKERS = 4 
@@ -75,21 +75,21 @@ def get_data_loader(image_dir=DIV2K_IMAGE_DIR, batch_size=BATCH_SIZE, num_worker
 # ----------------------------------------------------------------------
 # 🌟 NEXT STEP VALIDATION (Run this only after data is moved and extracted!)
 # ----------------------------------------------------------------------
-# if __name__ == '__main__':
-#     try:
-#         loader, ds = get_data_loader()
-#         print(f"Total images loaded: {len(ds)}")
+if __name__ == '__main__':
+    try:
+        loader, ds = get_data_loader()
+        print(f"Total images loaded: {len(ds)}")
         
-#         # Test fetching one batch to confirm tensor shape and range
-#         for batch_idx, images in enumerate(loader):
-#             # Expected shape: [BATCH_SIZE, 3, IMAGE_SIZE, IMAGE_SIZE]
-#             print(f"Batch {batch_idx+1} shape: {images.shape}")
-#             
-#             # Expected range: Min should be close to -1.0, Max should be close to 1.0
-#             print(f"Tensor range: Min={images.min().item():.2f}, Max={images.max().item():.2f}")
-#             break
+        # Test fetching one batch to confirm tensor shape and range
+        for batch_idx, images in enumerate(loader):
+            # Expected shape: [BATCH_SIZE, 3, IMAGE_SIZE, IMAGE_SIZE]
+            print(f"Batch {batch_idx+1} shape: {images.shape}")
             
-#     except FileNotFoundError as e:
-#         print(f"Data not ready. Please confirm the folder path: {DIV2K_IMAGE_DIR} and extraction are complete.")
-#     except Exception as e:
-#         print(f"An unexpected error occurred: {e}. Check your NUM_WORKERS setting (try 0).")
+            # Expected range: Min should be close to -1.0, Max should be close to 1.0
+            print(f"Tensor range: Min={images.min().item():.2f}, Max={images.max().item():.2f}")
+            break
+            
+    except FileNotFoundError as e:
+        print(f"Data not ready. Please confirm the folder path: {DIV2K_IMAGE_DIR} and extraction are complete.")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}. Check your NUM_WORKERS setting (try 0).")

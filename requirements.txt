@@ -9,3 +9,5 @@ sentencepiece
 matplotlib
 tqdm
 python-dotenv
+diffusers
+accelerate

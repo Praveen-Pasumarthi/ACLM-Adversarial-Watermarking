@@ -2,18 +2,19 @@ import torch
 import torch.optim as optim
 import numpy as np
 import os
+# Ensure ACLM_Loss is imported correctly, assuming it's been updated in aclm_system.py
 from aclm_system import ACLMSystem, ACLM_Loss, M_BITS
 from data_loader import get_data_loader 
 
 # --- Hyperparameters ---
-LEARNING_RATE_ED = 1e-4
-LEARNING_RATE_A = 1e-5
+LEARNING_RATE_ED = 1e-5 # Keep low due to high recovery loss weight
+LEARNING_RATE_A = 1e-6 # Keep A slow
 NUM_EPOCHS = 10
 LOG_INTERVAL = 100
 IMAGE_HEIGHT = 256
 
 # ----------------------------------------------------------------------
-#                         UTILITY FUNCTIONS
+#                         UTILITY FUNCTIONS (UNCHANGED)
 # ----------------------------------------------------------------------
 
 def generate_random_codeword(batch_size, device):
@@ -38,7 +39,8 @@ def train_aclm():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
-    model = ACLMSystem(device=device)
+    # This will now trigger the Real VAE download and initialization
+    model = ACLMSystem(device=device) 
     train_loader, _ = get_data_loader()
     
     optimizer_ed = optim.Adam(
@@ -52,7 +54,8 @@ def train_aclm():
     
     model.train()
 
-    print("Starting Minimax ACLM Training...")
+    # Updated message, as we are now running the full adversarial training
+    print("Starting Minimax ACLM Training (Full Adversarial Game)...")
 
     for epoch in range(1, NUM_EPOCHS + 1):
         total_loss_ed = 0
@@ -69,13 +72,19 @@ def train_aclm():
             # STEP 1: TRAIN ADVERSARY (A) - MAXIMIZE CORRUPTION
             # ---------------------------------------------------------
             
+            # We wrap the VAE and Encoder forward pass in no_grad for A's optimization
             with torch.no_grad():
                 z = model.vae.encode(x)
-                z_tilde = model.encoder(z, M).detach() 
-
-            z_prime = model.adversary(z_tilde)
+                # z_tilde is detached here so A doesn't update E
+                z_tilde_detached = model.encoder(z, M).detach() 
+            
+            # A Forward Pass (A is trained to maximize loss using z_tilde_detached)
+            z_prime = model.adversary(z_tilde_detached)
             M_hat_a = model.decoder(z_prime)
-            _, L_A_Total, _, _ = ACLM_Loss(M, M_hat_a, x, x)
+            
+            x_dummy = torch.randn_like(x).to(x.device) 
+            # A's loss uses the corrupted output M_hat_a
+            _, L_A_Total, _, _ = ACLM_Loss(M, M_hat_a, x, x_dummy, z, z_tilde_detached) 
             
             optimizer_a.zero_grad()
             L_A_Total.backward()
@@ -89,11 +98,30 @@ def train_aclm():
             for param in model.adversary.parameters():
                 param.requires_grad = False
             
-            M_hat, x_tilde, z_tilde_full = model(x, M)
+            optimizer_ed.zero_grad() 
+
+            # --- REVERTED TO STANDARD ADVERSARIAL FLOW ---
             
-            L_E_D_Total, _, L_Fidelity, L_Recovery = ACLM_Loss(M, M_hat, x, x_tilde)
+            # 1. Encode image to get z (no_grad is not needed as VAE is frozen)
+            z = model.vae.encode(x)
             
-            optimizer_ed.zero_grad()
+            # 2. Embed Watermark (E) - Gradient active for Encoder
+            z_tilde = model.encoder(z, M) 
+            
+            # 3. Apply Adversary (A) - Uses A's weights but no gradient flows back to A
+            z_prime = model.adversary(z_tilde) 
+
+            # 4. Decode the CORRUPTED latent z_prime
+            M_hat = model.decoder(z_prime)
+            
+            # 5. Decode z_tilde for Fidelity Check (No gradient needed for decoding image)
+            with torch.no_grad():
+                x_tilde = model.vae.decode(z_tilde)
+            
+            # Calculate Loss for E/D (L_E_D_Total)
+            # E/D Loss uses the CORRUPTED M_hat to learn robustness
+            L_E_D_Total, _, L_Fidelity, L_Recovery = ACLM_Loss(M, M_hat, x, x_tilde, z, z_tilde)
+            
             L_E_D_Total.backward() 
             optimizer_ed.step()
             
