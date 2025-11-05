@@ -3,13 +3,19 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 # --- Configuration Constants (Must be consistent across all files) ---
-M_BITS = 256 
+M_BITS = 448 # Codeword length (Source 256 bits + Parity 192 bits)
 Z_LATENT_CHANNELS = 4
-Z_LATENT_H = 32 # Latent height for 256x256 image input (256/8)
-Z_LATENT_W = 32 # Latent width for 256x256 image input (256/8)
+Z_LATENT_H = 32 
+Z_LATENT_W = 32 
+
+# The size of the flattened message map
+FLAT_MAP_SIZE = Z_LATENT_H * Z_LATENT_W # 1024
+
+# The size of the raw flattened latent input (for the simplified decoder)
+FLAT_SIZE_INPUT = Z_LATENT_CHANNELS * Z_LATENT_H * Z_LATENT_W # 4096
 
 # ----------------------------------------------------------------------
-#                           ACLM ENCODER (E) - (UNCHANGED)
+#                           ACLM ENCODER (E) - (FIXED)
 # ----------------------------------------------------------------------
 
 class ACLMEncoder(nn.Module):
@@ -19,8 +25,12 @@ class ACLMEncoder(nn.Module):
     def __init__(self):
         super(ACLMEncoder, self).__init__()
         
+        # 1. Message Embedding: Convert the flat codeword into a spatial map
         self.message_map = nn.Sequential(
-            nn.Linear(M_BITS, Z_LATENT_H * Z_LATENT_W),
+            nn.Linear(M_BITS, FLAT_MAP_SIZE),
+            nn.LeakyReLU(0.2),
+            # CRITICAL FIX: BatchNorm1d forces the signal magnitude to a standard scale
+            nn.BatchNorm1d(FLAT_MAP_SIZE), 
             nn.LeakyReLU(0.2),
         )
 
@@ -30,7 +40,7 @@ class ACLMEncoder(nn.Module):
             nn.LeakyReLU(0.2),
 
             nn.Conv2d(Z_LATENT_CHANNELS * 2, Z_LATENT_CHANNELS, kernel_size=3, padding=1),
-            nn.ReLU() # Kept ReLU to encourage strong initial signal
+            nn.ReLU()
         )
 
     def forward(self, z, C):
@@ -46,44 +56,26 @@ class ACLMEncoder(nn.Module):
         return z_tilde
 
 # ----------------------------------------------------------------------
-#                         ACLM DECODER (D) - (UPDATED)
+#                           ACLM DECODER (D) - (SIMPLIFIED)
 # ----------------------------------------------------------------------
-
-# The size after the final convolution layer (Z_LATENT_CHANNELS * 4) * H * W
-FLAT_SIZE = Z_LATENT_CHANNELS * 4 * Z_LATENT_H * Z_LATENT_W # 4 * 4 * 32 * 32 = 16384
 
 class ACLMDecoder(nn.Module):
     """
-    Decoder (D): Extracts the corrupted Codeword (C_hat) from the attacked latent vector (z').
+    Decoder (D): Simplified to linear layers for robust channel establishment.
     """
     def __init__(self):
         super(ACLMDecoder, self).__init__()
-
-        self.conv_layers = nn.Sequential(
-            nn.Conv2d(Z_LATENT_CHANNELS, Z_LATENT_CHANNELS * 2, kernel_size=3, padding=1),
-            nn.BatchNorm2d(Z_LATENT_CHANNELS * 2),
-            nn.LeakyReLU(0.2),
-
-            nn.Conv2d(Z_LATENT_CHANNELS * 2, Z_LATENT_CHANNELS * 4, kernel_size=3, padding=1),
-            nn.BatchNorm2d(Z_LATENT_CHANNELS * 4),
-            nn.LeakyReLU(0.2),
-        )
-
-        # FIX: Replaced Global Pooling with Flatten to avoid signal dilution
+        
         self.flatten = nn.Flatten()
-
+        
         self.decoder_head = nn.Sequential(
-            # Input size is the fully flattened feature map
-            nn.Linear(FLAT_SIZE, M_BITS * 4),
+            nn.Linear(FLAT_SIZE_INPUT, M_BITS * 2),
             nn.LeakyReLU(0.2),
-            nn.Linear(M_BITS * 4, M_BITS),
-            nn.Sigmoid()
+            nn.Linear(M_BITS * 2, M_BITS),
+            nn.Sigmoid() 
         )
 
     def forward(self, z_prime):
-        features = self.conv_layers(z_prime)
-
-        # FIX: Use Flatten instead of pooling
-        C_hat = self.decoder_head(self.flatten(features))
-
+        flat_features = self.flatten(z_prime)
+        C_hat = self.decoder_head(flat_features)
         return C_hat

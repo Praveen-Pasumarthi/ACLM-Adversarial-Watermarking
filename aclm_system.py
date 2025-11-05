@@ -6,7 +6,7 @@ from diffusers import AutoencoderKL
 from aclm_networks import ACLMEncoder, ACLMDecoder 
 
 # --- Configuration Constants (Check alignment with aclm_networks.py) ---
-M_BITS = 256
+M_BITS = 448
 Z_LATENT_CHANNELS = 4
 # We keep the aggressive lambda values here to ensure recovery priority continues
 LAMBDA_FIDELITY = 0.01    # Fidelity on Latent Space (MSE)
