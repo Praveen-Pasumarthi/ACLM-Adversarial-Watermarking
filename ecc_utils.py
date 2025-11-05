@@ -98,3 +98,15 @@ class Hamming74:
         M_hat = C_hat_hard[:, :, :BLOCK_SIZE].reshape(batch_size, SOURCE_BITS) # [B, 256]
         
         return M_hat # Return the corrected/decoded data bits
+    
+def calculate_ber(M, M_hat):
+    """Calculates the Final Bit Error Rate (BER) between original message (M) and decoded message (M_hat)."""
+    # M_hat is assumed to be the hard-decoded, corrected message (256 bits)
+    
+    # Calculate the number of incorrect bits
+    incorrect_bits = torch.sum(torch.abs(M_hat - M)).item()
+    
+    # Calculate BER based on the SOURCE_BITS (256)
+    # M.size(1) is SOURCE_BITS (256)
+    ber = incorrect_bits / (M.size(0) * M.size(1))
+    return ber

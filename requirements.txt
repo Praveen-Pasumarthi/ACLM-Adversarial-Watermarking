@@ -12,3 +12,4 @@ python-dotenv
 diffusers
 accelerate
 hf_xet
+scikit-learn
