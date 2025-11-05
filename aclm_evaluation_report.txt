@@ -12,22 +12,24 @@ Starting Evaluation over 800 images.
 
 --- Running Attack Strength: 0.200 ---
 
+✅ Structured data saved to aclm_evaluation_data.json.
+
 ==================================================
             🏆 ACLM FINAL EVALUATION REPORT 🏆
 ==================================================
 
 I. BASELINE IMPERCEPTIBILITY & UNCORRECTED ROBUSTNESS (NO EXTERNAL NOISE)
-   -> Average PSNR (Objective 3): 6.73 dB (Target > 50 dB)
-   -> Raw Codeword BER (448 bits): 0.2293
-   -> Final Message BER (256 bits): 0.2296
+   -> Average PSNR (Objective 3): 6.75 dB (Target > 50 dB)
+   -> Raw Codeword BER (448 bits): 0.2284
+   -> Final Message BER (256 bits): 0.2285
 
 III. ADVERSARIAL ROBUSTNESS BENCHMARK (BER vs. Simulated Noise)
    (Data for Robustness Curve Graph)
 --------------------------------------------------
 Attack Strength Raw BER         Final BER      
 --------------------------------------------------
-0.01            0.2286          0.2270         
-0.05            0.2294          0.2283         
-0.10            0.2282          0.2285         
-0.20            0.2291          0.2296         
+0.01            0.2292          0.2287         
+0.05            0.2294          0.2298         
+0.10            0.2300          0.2302         
+0.20            0.2306          0.2298         
 --------------------------------------------------

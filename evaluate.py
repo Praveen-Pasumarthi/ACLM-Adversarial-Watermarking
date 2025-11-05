@@ -4,8 +4,9 @@ import numpy as np
 import os
 from tqdm import tqdm
 from skimage.metrics import peak_signal_noise_ratio as psnr_metric
-import sys # <-- ADDED IMPORT
-import io  # <-- ADDED IMPORT
+import sys 
+import io
+import json # <-- ADDED IMPORT FOR JSON OPERATIONS
 
 # --- Project Imports ---
 from aclm_system import ACLMSystem
@@ -21,6 +22,7 @@ CHECKPOINT_PATH = "aclm_final_model.pth"
 TEST_BATCH_SIZE = 4
 # Attack strengths for Objective 4 benchmarking (Standard Deviations for Gaussian Noise)
 ATTACK_STRENGTHS = [0.00, 0.01, 0.05, 0.10, 0.20] 
+OUTPUT_JSON_FILE = "aclm_evaluation_data.json" # <-- NEW JSON OUTPUT FILE
 
 # ... (calculate_psnr function remains here) ...
 
@@ -42,7 +44,7 @@ def calculate_psnr(x_hat, x):
 
 
 # ----------------------------------------------------------------------
-#                           EVALUATION LOOP (UNCHANGED)
+#                           EVALUATION LOOP
 # ----------------------------------------------------------------------
 
 def evaluate_aclm(device):
@@ -65,7 +67,6 @@ def evaluate_aclm(device):
     
     print(f"Starting Evaluation over {len(ds)} images.")
     
-    # Storage for results (Objective 4 Data)
     benchmark_results = {}
     
     # Run evaluation across different attack strengths (Objective 4)
@@ -77,7 +78,6 @@ def evaluate_aclm(device):
         total_ber_final = 0
         total_count = 0
         
-        # Lists to gather all bits for a single, overall Confusion Matrix (only needed for 0.0 baseline)
         all_M_true = []
         all_M_pred = []
 
@@ -86,7 +86,6 @@ def evaluate_aclm(device):
                 x = x.to(device)
                 batch_size = x.size(0)
 
-                # Use fixed message M for consistent evaluation
                 M = torch.randint(0, 2, (batch_size, SOURCE_BITS)).float().to(device)
                 C = ecc_codec.encode(M)
                 
@@ -124,7 +123,6 @@ def evaluate_aclm(device):
                 # Gather data for overall confusion matrix (only need one attack level)
                 if attack_strength == 0.0:
                     all_M_true.append(M.cpu())
-                    # M_hat_decoded is already a hard decision (0 or 1) tensor
                     all_M_pred.append(M_hat_decoded.cpu())
                 
                 # Calculate final BER using M and M_hat_decoded
@@ -142,7 +140,8 @@ def evaluate_aclm(device):
             'Final BER': total_ber_final / total_count
         }
 
-
+    # --- NEW: JSON DATA STRUCTURE GENERATION ---
+    
     # 6. Final Reporting and Confusion Matrix (Objective 1, 2, 4 Fulfillment)
     
     # Calculate Statistical Metrics for the 0.0 baseline (Objective 1)
@@ -152,6 +151,37 @@ def evaluate_aclm(device):
         stats = calculate_statistical_metrics(M_true_combined, M_pred_combined)
     else:
         stats = None
+        
+    # --- Aggregate all results into a single dictionary for JSON saving ---
+    final_report_data = {
+        'baseline_psnr': benchmark_results[0.0]['PSNR'],
+        'baseline_raw_ber': benchmark_results[0.0]['Raw BER'],
+        'baseline_final_ber': benchmark_results[0.0]['Final BER'],
+        'stats': stats,
+        'robustness_benchmark': [
+            {'strength': s, 'raw_ber': res['Raw BER'], 'final_ber': res['Final BER']}
+            for s, res in benchmark_results.items()
+        ]
+    }
+    
+    # 7. Save the structured data to a JSON file
+    with open(OUTPUT_JSON_FILE, 'w', encoding='utf-8') as f:
+        # We need to manually convert numpy types (like np.float64 from calculate_psnr) to standard Python floats
+        def convert_numpy_types(obj):
+            if isinstance(obj, np.generic):
+                return obj.item()
+            if isinstance(obj, list):
+                return [convert_numpy_types(i) for i in obj]
+            return obj
+
+        json.dump(convert_numpy_types(final_report_data), f, indent=4)
+    
+    # --- END OF JSON SAVING ---
+    
+    
+    # 8. PRINT REPORT TO CONSOLE/TEXT FILE (FOR VISUAL CONFIRMATION)
+    
+    print(f"\n✅ Structured data saved to {OUTPUT_JSON_FILE}.")
     
     print("\n" + "="*50)
     print("            🏆 ACLM FINAL EVALUATION REPORT 🏆")
@@ -195,7 +225,7 @@ if __name__ == '__main__':
     else:
         device = torch.device("cpu")
         
-    # Define the output file path
+    # Define the output file path for the text report
     OUTPUT_FILE = "aclm_evaluation_report.txt"
 
     # --- OUTPUT REDIRECTION BLOCK ---
@@ -203,12 +233,14 @@ if __name__ == '__main__':
     # Save the original stdout
     original_stdout = sys.stdout 
     
+    # CRITICAL: Run the evaluation block
     try:
+        # Open file to save the final text report (this includes the print statements)
         with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
             # Set stdout to the file object
             sys.stdout = f
             
-            # Run the evaluation function
+            # Run the evaluation function (which also saves the JSON file)
             evaluate_aclm(device)
             
     except Exception as e:
