@@ -1,0 +1,33 @@
+📥 Loading pre-trained VAE from Stable Diffusion v1-5...
+✅ Model loaded from aclm_final_model.pth.
+Starting Evaluation over 800 images.
+
+--- Running Attack Strength: 0.000 ---
+
+--- Running Attack Strength: 0.010 ---
+
+--- Running Attack Strength: 0.050 ---
+
+--- Running Attack Strength: 0.100 ---
+
+--- Running Attack Strength: 0.200 ---
+
+==================================================
+            🏆 ACLM FINAL EVALUATION REPORT 🏆
+==================================================
+
+I. BASELINE IMPERCEPTIBILITY & UNCORRECTED ROBUSTNESS (NO EXTERNAL NOISE)
+   -> Average PSNR (Objective 3): 6.73 dB (Target > 50 dB)
+   -> Raw Codeword BER (448 bits): 0.2293
+   -> Final Message BER (256 bits): 0.2296
+
+III. ADVERSARIAL ROBUSTNESS BENCHMARK (BER vs. Simulated Noise)
+   (Data for Robustness Curve Graph)
+--------------------------------------------------
+Attack Strength Raw BER         Final BER      
+--------------------------------------------------
+0.01            0.2286          0.2270         
+0.05            0.2294          0.2283         
+0.10            0.2282          0.2285         
+0.20            0.2291          0.2296         
+--------------------------------------------------

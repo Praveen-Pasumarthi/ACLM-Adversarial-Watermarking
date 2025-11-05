@@ -4,6 +4,8 @@ import numpy as np
 import os
 from tqdm import tqdm
 from skimage.metrics import peak_signal_noise_ratio as psnr_metric
+import sys # <-- ADDED IMPORT
+import io  # <-- ADDED IMPORT
 
 # --- Project Imports ---
 from aclm_system import ACLMSystem
@@ -19,12 +21,8 @@ CHECKPOINT_PATH = "aclm_final_model.pth"
 TEST_BATCH_SIZE = 4
 # Attack strengths for Objective 4 benchmarking (Standard Deviations for Gaussian Noise)
 ATTACK_STRENGTHS = [0.00, 0.01, 0.05, 0.10, 0.20] 
-# LPIPS calculation is computationally intensive and requires installation/import
-# LPIPS_METRIC = lpips.LPIPS(net='alex') # Placeholder for real integration
 
-# ----------------------------------------------------------------------
-#                         UTILITY FUNCTIONS
-# ----------------------------------------------------------------------
+# ... (calculate_psnr function remains here) ...
 
 def calculate_psnr(x_hat, x):
     """Calculates PSNR metric on a batch of images (tensors)."""
@@ -44,7 +42,7 @@ def calculate_psnr(x_hat, x):
 
 
 # ----------------------------------------------------------------------
-#                           EVALUATION LOOP
+#                           EVALUATION LOOP (UNCHANGED)
 # ----------------------------------------------------------------------
 
 def evaluate_aclm(device):
@@ -62,7 +60,6 @@ def evaluate_aclm(device):
         return
 
     # 2. Setup Data Loader and Codec
-    # Evaluation typically uses a separate, held-out test set, but we use the train set here for simplicity
     eval_loader, ds = get_data_loader(batch_size=TEST_BATCH_SIZE, num_workers=0)
     ecc_codec = Hamming74(device=device)
     
@@ -151,7 +148,6 @@ def evaluate_aclm(device):
     # Calculate Statistical Metrics for the 0.0 baseline (Objective 1)
     if all_M_true and all_M_pred:
         M_true_combined = torch.cat(all_M_true)
-        M_pred_combined = torch.cat(all_M_M_pred) # M_M_pred is a typo here, should be all_M_pred
         M_pred_combined = torch.cat(all_M_pred)
         stats = calculate_statistical_metrics(M_true_combined, M_pred_combined)
     else:
@@ -199,4 +195,29 @@ if __name__ == '__main__':
     else:
         device = torch.device("cpu")
         
-    evaluate_aclm(device)
+    # Define the output file path
+    OUTPUT_FILE = "aclm_evaluation_report.txt"
+
+    # --- OUTPUT REDIRECTION BLOCK ---
+    
+    # Save the original stdout
+    original_stdout = sys.stdout 
+    
+    try:
+        with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
+            # Set stdout to the file object
+            sys.stdout = f
+            
+            # Run the evaluation function
+            evaluate_aclm(device)
+            
+    except Exception as e:
+        # Print error to original stdout if redirection fails
+        print(f"\n❌ An error occurred during evaluation: {e}", file=original_stdout)
+        
+    finally:
+        # Restore the original stdout regardless of success/failure
+        sys.stdout = original_stdout 
+    
+    # Print a confirmation message to the terminal
+    print(f"\n✅ Evaluation complete. The full report has been saved to: {OUTPUT_FILE}")
