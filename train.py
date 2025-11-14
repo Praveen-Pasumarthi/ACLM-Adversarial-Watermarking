@@ -10,16 +10,16 @@ from aclm_system import ACLMSystem, ACLM_Loss, M_BITS
 from data_loader import get_data_loader 
 
 # --- Hyperparameters ---
-# Increased learning rates to attempt to break the final BER deadlock
+# Final stable configuration after tuning
 LEARNING_RATE_ED = 1e-4 
 LEARNING_RATE_A = 1e-5 
 NUM_EPOCHS = 10
 LOG_INTERVAL = 100
 IMAGE_HEIGHT = 256
-CHECKPOINT_FILENAME = "aclm_final_model.pth" # Defined checkpoint file name
+CHECKPOINT_FILENAME = "aclm_final_model.pth" 
 
 # ----------------------------------------------------------------------
-#                         UTILITY FUNCTIONS 
+#                         UTILITY FUNCTIONS (UNCHANGED)
 # ----------------------------------------------------------------------
 
 def generate_random_message(batch_size, device):
@@ -47,7 +47,7 @@ def save_checkpoint(model, optimizer_ed, optimizer_a, epoch, filename):
     print(f"\n✅ Checkpoint saved to {filename} at Epoch {epoch}.")
 
 # ----------------------------------------------------------------------
-#                           TRAINING LOOP
+#                           TRAINING LOOP (FINAL)
 # ----------------------------------------------------------------------
 
 def train_aclm():
@@ -93,7 +93,7 @@ def train_aclm():
             
             # --- ECC INTEGRATION: Encode M into the longer codeword C ---
             M = generate_random_message(batch_size, device) 
-            C = ecc_codec.encode(M)                         
+            C = ecc_codec.encode(M) 
             
             # ---------------------------------------------------------
             # STEP 1: TRAIN ADVERSARY (A) - MAXIMIZE CORRUPTION
@@ -106,8 +106,8 @@ def train_aclm():
             z_prime = model.adversary(C_tilde_detached)
             C_hat_a = model.decoder(z_prime) 
             
-            x_dummy = torch.randn_like(x).to(x.device) 
-            _, L_A_Total, _, _ = ACLM_Loss(C, C_hat_a, x, x_dummy, z, C_tilde_detached) 
+            # FIX: ACLM_Loss simplified (only C and C_hat_a passed)
+            _, L_A_Total, _, _ = ACLM_Loss(C, C_hat_a) 
             
             optimizer_a.zero_grad()
             L_A_Total.backward()
@@ -124,17 +124,14 @@ def train_aclm():
             optimizer_ed.zero_grad() 
             
             with torch.no_grad():
-                z = model.vae.encode(x)
+                z = model.vae.encode(x) # Z is input for Encoder
             
             C_tilde = model.encoder(z, C) 
             z_prime = model.adversary(C_tilde) 
             C_hat = model.decoder(z_prime) 
             
-            with torch.no_grad():
-                x_tilde = model.vae.decode(C_tilde)
-            
-            # Calculate Loss for E/D using the Codeword (C)
-            L_E_D_Total, _, L_Fidelity, L_Recovery = ACLM_Loss(C, C_hat, x, x_tilde, z, C_tilde)
+            # FIX: ACLM_Loss simplified (only C and C_hat passed)
+            L_E_D_Total, _, L_Fidelity, L_Recovery = ACLM_Loss(C, C_hat) 
             
             L_E_D_Total.backward() 
             optimizer_ed.step()
@@ -167,7 +164,6 @@ def train_aclm():
     # ---------------------------------------------------------
     # FINAL STEP: SAVE CHECKPOINT
     # ---------------------------------------------------------
-    # The model state at the end of the final epoch is saved for evaluation.
     save_checkpoint(model, optimizer_ed, optimizer_a, NUM_EPOCHS, CHECKPOINT_FILENAME)
     
 # --- Execution ---

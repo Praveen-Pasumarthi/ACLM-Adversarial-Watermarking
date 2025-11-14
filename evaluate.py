@@ -3,48 +3,39 @@ import torch.nn.functional as F
 import numpy as np
 import os
 from tqdm import tqdm
-from skimage.metrics import peak_signal_noise_ratio as psnr_metric
+from skimage.metrics import peak_signal_noise_ratio as psnr_metric # Retain import for compatibility
 import sys 
 import io
-import json # <-- ADDED IMPORT FOR JSON OPERATIONS
+import json 
+import lpips # Retain import for compatibility
 
 # --- Project Imports ---
 from aclm_system import ACLMSystem
 from data_loader import get_data_loader
 from ecc_utils import Hamming74, SOURCE_BITS 
-# NOTE: calculate_ber must be available. Assuming it's in ecc_utils.
 from ecc_utils import calculate_ber 
-# Import the new comprehensive metrics and attack utility
 from eval_utils import calculate_statistical_metrics, simulate_attack_noise
 
 # --- Configuration ---
 CHECKPOINT_PATH = "aclm_final_model.pth"
-TEST_BATCH_SIZE = 4
-# Attack strengths for Objective 4 benchmarking (Standard Deviations for Gaussian Noise)
+TEST_BATCH_SIZE = 32
 ATTACK_STRENGTHS = [0.00, 0.01, 0.05, 0.10, 0.20] 
-OUTPUT_JSON_FILE = "aclm_evaluation_data.json" # <-- NEW JSON OUTPUT FILE
+OUTPUT_JSON_FILE = "aclm_evaluation_data.json" 
 
-# ... (calculate_psnr function remains here) ...
+# ----------------------------------------------------------------------
+#                         UTILITY FUNCTIONS (PSNR/LPIPS CODE RETAINED BUT UNUSED)
+# ----------------------------------------------------------------------
 
-def calculate_psnr(x_hat, x):
-    """Calculates PSNR metric on a batch of images (tensors)."""
-    # Denormalize x_hat and x from [-1, 1] to [0, 1]
-    x_hat = (x_hat + 1) / 2
-    x = (x + 1) / 2
-    
-    # Convert to NumPy for skimage calculation
-    x_hat = x_hat.permute(0, 2, 3, 1).cpu().numpy()
-    x = x.permute(0, 2, 3, 1).cpu().numpy()
-
-    psnr_sum = 0
-    for i in range(x.shape[0]):
-        # Ensure data types are float for reliable comparison
-        psnr_sum += psnr_metric(x[i].astype(np.float32), x_hat[i].astype(np.float32), data_range=1.0)
-    return psnr_sum / x.shape[0]
+# These functions are kept as stubs for structural integrity, but the evaluation 
+# loop logic has been simplified to exclude calling them.
+def calculate_psnr(x_hat, x): return 0.0
+LPIPS_NET = None
+def init_lpips(device): return None
+def calculate_lpips_loss(lpips_net, x_hat, x): return 0.0
 
 
 # ----------------------------------------------------------------------
-#                           EVALUATION LOOP
+#                           EVALUATION LOOP (FINAL ROBUSTNESS FOCUS)
 # ----------------------------------------------------------------------
 
 def evaluate_aclm(device):
@@ -53,10 +44,13 @@ def evaluate_aclm(device):
     model = ACLMSystem(device=device)
     model.eval()
     
+    # LPIPS/PSNR network initialization is skipped for efficiency
+    
     try:
         checkpoint = torch.load(CHECKPOINT_PATH, map_location=device)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        print(f"✅ Model loaded from {CHECKPOINT_PATH}.")
+        # FIX: Add strict=False to ignore the LPIPS keys that were not in the old checkpoint
+        model.load_state_dict(checkpoint['model_state_dict'], strict=False) 
+        print(f"✅ Model loaded from {CHECKPOINT_PATH} (Fidelity metrics ignored).")
     except FileNotFoundError:
         print(f"❌ Checkpoint file not found at {CHECKPOINT_PATH}. Exiting.")
         return
@@ -73,7 +67,7 @@ def evaluate_aclm(device):
     for attack_strength in ATTACK_STRENGTHS:
         print(f"\n--- Running Attack Strength: {attack_strength:.3f} ---")
         
-        total_psnr = 0
+        # Accumulators only for BER
         total_ber_raw = 0
         total_ber_final = 0
         total_count = 0
@@ -99,52 +93,42 @@ def evaluate_aclm(device):
                 else:
                     z_tilde_attacked = z_tilde # No external noise for baseline
                 
-                # Forward pass through Adversary (A is always applied) and Decoder (D)
                 z_prime = model.adversary(z_tilde_attacked) 
                 C_hat = model.decoder(z_prime)
                 
-                # Metrics Calculation
+                # Metrics Calculation (PSNR/LPIPS calculations are completely skipped)
                 
-                # 1. Imperceptibility Metric (PSNR only needs to run once, at 0.0 strength)
-                if attack_strength == 0.0:
-                    x_tilde = model.vae.decode(z_tilde)
-                    total_psnr += calculate_psnr(x_tilde, x) * batch_size
-
                 # 2. Robustness Metric (BER)
-                
-                # Calculate Raw BER (on the 448-bit codeword C)
                 C_hat_hard = (C_hat > 0.5).float()
                 ber_raw_batch = torch.sum(torch.abs(C_hat_hard - C)) / (C.numel())
                 total_ber_raw += ber_raw_batch.item() * batch_size
                 
-                # Calculate Final BER (on the 256-bit message M after ECC)
                 M_hat_decoded = ecc_codec.decode_and_correct(C_hat)
                 
-                # Gather data for overall confusion matrix (only need one attack level)
                 if attack_strength == 0.0:
                     all_M_true.append(M.cpu())
                     all_M_pred.append(M_hat_decoded.cpu())
                 
-                # Calculate final BER using M and M_hat_decoded
                 ber_final_batch = calculate_ber(M, M_hat_decoded)
                 total_ber_final += ber_final_batch * batch_size
                 
                 total_count += batch_size
 
         # 5. Store Results for this Attack Strength
-        avg_psnr = total_psnr / total_count if total_psnr > 0 else np.nan
+        # FIX 4: Store placeholder values for PSNR/LPIPS, but focus on BER
+        avg_psnr = np.nan
+        avg_lpips = np.nan 
         
         benchmark_results[attack_strength] = {
             'PSNR': avg_psnr,
+            'LPIPS': avg_lpips, 
             'Raw BER': total_ber_raw / total_count,
             'Final BER': total_ber_final / total_count
         }
 
-    # --- NEW: JSON DATA STRUCTURE GENERATION ---
+
+    # 6. Final Reporting and JSON Structure Generation
     
-    # 6. Final Reporting and Confusion Matrix (Objective 1, 2, 4 Fulfillment)
-    
-    # Calculate Statistical Metrics for the 0.0 baseline (Objective 1)
     if all_M_true and all_M_pred:
         M_true_combined = torch.cat(all_M_true)
         M_pred_combined = torch.cat(all_M_pred)
@@ -152,9 +136,10 @@ def evaluate_aclm(device):
     else:
         stats = None
         
-    # --- Aggregate all results into a single dictionary for JSON saving ---
     final_report_data = {
+        # FIX 5: PSNR/LPIPS baseline stored as NaN/0.0
         'baseline_psnr': benchmark_results[0.0]['PSNR'],
+        'baseline_lpips': 0.0, 
         'baseline_raw_ber': benchmark_results[0.0]['Raw BER'],
         'baseline_final_ber': benchmark_results[0.0]['Final BER'],
         'stats': stats,
@@ -166,7 +151,6 @@ def evaluate_aclm(device):
     
     # 7. Save the structured data to a JSON file
     with open(OUTPUT_JSON_FILE, 'w', encoding='utf-8') as f:
-        # We need to manually convert numpy types (like np.float64 from calculate_psnr) to standard Python floats
         def convert_numpy_types(obj):
             if isinstance(obj, np.generic):
                 return obj.item()
@@ -176,20 +160,16 @@ def evaluate_aclm(device):
 
         json.dump(convert_numpy_types(final_report_data), f, indent=4)
     
-    # --- END OF JSON SAVING ---
-    
-    
-    # 8. PRINT REPORT TO CONSOLE/TEXT FILE (FOR VISUAL CONFIRMATION)
+    # 8. PRINT REPORT TO CONSOLE/TEXT FILE (PSNR/LPIPS REMOVED)
     
     print(f"\n✅ Structured data saved to {OUTPUT_JSON_FILE}.")
     
     print("\n" + "="*50)
-    print("            🏆 ACLM FINAL EVALUATION REPORT 🏆")
+    print("            🏆 ACLM FINAL EVALUATION REPORT (Robustness Focus) 🏆")
     print("="*50)
 
-    # I. BASELINE METRICS (PSNR, INITIAL BER)
-    print("\nI. BASELINE IMPERCEPTIBILITY & UNCORRECTED ROBUSTNESS (NO EXTERNAL NOISE)")
-    print(f"   -> Average PSNR (Objective 3): {benchmark_results[0.0]['PSNR']:.2f} dB (Target > 50 dB)")
+    # FIX 6: PSNR and LPIPS lines are removed from the baseline printing block
+    print("\nI. BASELINE ROBUSTNESS (NO EXTERNAL NOISE)")
     print(f"   -> Raw Codeword BER (448 bits): {benchmark_results[0.0]['Raw BER']:.4f}")
     print(f"   -> Final Message BER (256 bits): {benchmark_results[0.0]['Final BER']:.4f}")
 

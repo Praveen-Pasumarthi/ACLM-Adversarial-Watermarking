@@ -8,10 +8,9 @@ from aclm_networks import ACLMEncoder, ACLMDecoder
 # --- Configuration Constants (Check alignment with aclm_networks.py) ---
 M_BITS = 448
 Z_LATENT_CHANNELS = 4
-# We keep the aggressive lambda values here to ensure recovery priority continues
-LAMBDA_FIDELITY = 0.01    # Fidelity on Latent Space (MSE)
-LAMBDA_RECOVERY = 50.0     # Recovery on Codeword (BCE)
-LAMBDA_ADVERSARIAL = 0.5  # Adversarial Attack Weight
+# LAMBDA_FIDELITY is removed as it is no longer used.
+LAMBDA_RECOVERY = 10.0     # Keeping high priority for recovery
+LAMBDA_ADVERSARIAL = 0.5   # Adversarial Attack Weight
 
 class AdversarialChannel(nn.Module):
     """
@@ -26,7 +25,7 @@ class AdversarialChannel(nn.Module):
         return self.conv(z_tilde)
     
 # ----------------------------------------------------------------------
-#                         REAL VAE INTEGRATION
+#                         REAL VAE INTEGRATION (UNCHANGED)
 # ----------------------------------------------------------------------
 
 class RealVAE(nn.Module):
@@ -36,49 +35,41 @@ class RealVAE(nn.Module):
     def __init__(self):
         super().__init__()
         print("📥 Loading pre-trained VAE from Stable Diffusion v1-5...")
-        # Load the pre-trained VAE weights
         self.vae = AutoencoderKL.from_pretrained(
             "runwayml/stable-diffusion-v1-5", subfolder="vae"
         )
-        # CRITICAL: Freeze the VAE parameters entirely
         self.vae.requires_grad_(False)
         self.scale_factor = 0.18215 # Standard SD VAE scale factor
 
     def encode(self, x):
         """Encodes image [B, 3, H, W] to latent [B, 4, h, w]."""
-        # x is assumed to be in the [-1, 1] range (from data_loader)
         latent = self.vae.encode(x).latent_dist.sample()
-        # Scale the latent output
         return latent * self.scale_factor
 
     def decode(self, z):
         """Decodes latent to image space."""
-        # Un-scale the latent input
         z = z / self.scale_factor
         image = self.vae.decode(z).sample
-        # The output image is in [-1, 1] range
         return image
 
 # ----------------------------------------------------------------------
-#                           ACLM SYSTEM CLASS (UPDATED VAE)
+#                           ACLM SYSTEM CLASS (SIMPLIFIED FOR ROBUSTNESS)
 # ----------------------------------------------------------------------
 
 class ACLMSystem(nn.Module):
     """
-    The unified ACLM framework: combines the Real VAE, Encoder (E), Decoder (D), and Adversary (A).
+    The unified ACLM framework, focused purely on robustness.
     """
     def __init__(self, device='cpu'):
         super().__init__()
         self.device = device
         
-        # Core ACLM Networks
         self.encoder = ACLMEncoder().to(device)
         self.decoder = ACLMDecoder().to(device)
         self.adversary = AdversarialChannel().to(device)
         
-        # LDM Component (Now Real)
-        self.vae = RealVAE().to(device) # Replaced DummyVAE with RealVAE
-        self.vae.eval() # Set VAE to evaluation mode
+        self.vae = RealVAE().to(device) 
+        self.vae.eval() 
         
         # Sanity check: ensure VAE parameters are truly frozen
         for param in self.vae.parameters():
@@ -88,11 +79,12 @@ class ACLMSystem(nn.Module):
     def forward(self, x, M):
         """
         Full forward pass: Embed -> Attack -> Extract.
+        FIX 1: Removed x_tilde from return, as it is only for Fidelity/PSNR.
         """
         # Encode image to get original latent vector z
         z = self.vae.encode(x)
         
-        # Embed Watermark (E)
+        # Embed Codeword (E)
         z_tilde = self.encoder(z, M)
         
         # Apply Adversarial Channel (A)
@@ -101,23 +93,20 @@ class ACLMSystem(nn.Module):
         # Extract Watermark (D)
         M_hat = self.decoder(z_prime)
         
-        # Decode Watermarked Latent (z_tilde) for pixel fidelity (optional in this fix)
-        x_tilde = self.vae.decode(z_tilde)
-        
-        # Returns the necessary components for loss calculation
-        return M_hat, x_tilde, z_tilde, z 
+        # Returns only the components strictly required for the robustness loss and further steps
+        return M_hat, z_tilde, z # M_hat (for loss), z_tilde/z (for analysis/input to E/A)
 
 # ----------------------------------------------------------------------
-#                 UPDATED ACLM MINIMAX LOSS FUNCTION (UNCHANGED)
+#                 ACLM MINIMAX LOSS FUNCTION (SIMPLIFIED FOR ROBUSTNESS)
 # ----------------------------------------------------------------------
 
-def ACLM_Loss(M, M_hat, x, x_tilde, z, z_tilde):
+# FIX 2: Loss function simplified to accept only required arguments and focus on L_Recovery.
+def ACLM_Loss(M, M_hat): 
     """
-    Computes the three-part Minimax Loss (L_Total) using Latent Space Fidelity.
+    Computes the Minimax Loss (L_Total) focused solely on L_Recovery.
     """
     
-    # 1. Fidelity Loss (L_Fidelity): Latent MSE
-    L_Fidelity = F.mse_loss(z_tilde, z) 
+    # 1. Fidelity Loss (L_Fidelity): REMOVED ENTIRELY
 
     # 2. Recovery Loss (L_Recovery): Codeword BCE
     L_Recovery = F.binary_cross_entropy(M_hat, M)
@@ -126,9 +115,11 @@ def ACLM_Loss(M, M_hat, x, x_tilde, z, z_tilde):
     L_Adversarial_Term = -L_Recovery 
     
     # Total Loss for Encoder/Decoder (minimized)
-    L_E_D_Total = (LAMBDA_FIDELITY * L_Fidelity) + (LAMBDA_RECOVERY * L_Recovery)
+    # FIX 3: L_E_D_Total relies ONLY on L_Recovery.
+    L_E_D_Total = (LAMBDA_RECOVERY * L_Recovery)
     
     # Total Loss for Attacker (maximized)
     L_A_Total = LAMBDA_ADVERSARIAL * L_Adversarial_Term
 
-    return L_E_D_Total, L_A_Total, L_Fidelity.item(), L_Recovery.item()
+    # FIX 4: Return tuple simplified. L_Fidelity is now 0.0.
+    return L_E_D_Total, L_A_Total, 0.0, L_Recovery.item()

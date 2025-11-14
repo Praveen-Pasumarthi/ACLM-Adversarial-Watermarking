@@ -19,27 +19,28 @@ def calculate_statistical_metrics(M_true, M_pred_hard):
     # Check if the confusion matrix has the expected shape (2x2)
     if cm.size == 4:
         TN, FP, FN, TP = cm.ravel()
-    elif len(M_true_flat) == 0:
-        return None # No data to report metrics
     else:
-        # Handle cases where only one class (0 or 1) is present
-        # This is unlikely for random messages, but handles edge cases
+        # Handle cases where only one class (0 or 1) is present or data is empty
+        # This will return the simple BER and nan for the rates.
+        BER = (M_true_flat != M_pred_flat).mean().item() if len(M_true_flat) > 0 else 0.0
         return {
-            'BER': (M_true_flat != M_pred_flat).mean(),
-            'TPR': np.nan, 'TNR': np.nan, 'FPR': np.nan, 'FNR': np.nan,
-            'cm': cm
+            'BER': BER,
+            'TPR': float('nan'), 'TNR': float('nan'), 'FPR': float('nan'), 'FNR': float('nan'),
+            'cm': cm.tolist()
         }
 
     # Calculate metrics
-    P = TP + FN # Actual Positives (1s)
-    N = TN + FP # Actual Negatives (0s)
+    P = int(TP + FN) # Actual Positives (1s)
+    N = int(TN + FP) # Actual Negatives (0s)
 
-    TPR = TP / P if P > 0 else np.nan # True Positive Rate (Sensitivity/Recall)
-    TNR = TN / N if N > 0 else np.nan # True Negative Rate (Specificity)
-    FPR = FP / N if N > 0 else np.nan # False Positive Rate
-    FNR = FN / P if P > 0 else np.nan # False Negative Rate
+    # Calculate rates with robust zero-division handling
+    # We use standard Python float('nan') instead of np.nan for JSON compatibility
+    TPR = TP / P if P > 0 else 0.0 # True Positive Rate (Sensitivity/Recall)
+    TNR = TN / N if N > 0 else 0.0 # True Negative Rate (Specificity)
+    FPR = FP / N if N > 0 else 0.0 # False Positive Rate
+    FNR = FN / P if P > 0 else 0.0 # False Negative Rate
 
-    BER = (FP + FN) / (P + N) # Total bit errors / Total bits
+    BER = (FP + FN) / (P + N) if (P + N) > 0 else 0.0 # Total bit errors / Total bits (Always reliable since total count is high)
 
     return {
         'BER': BER,

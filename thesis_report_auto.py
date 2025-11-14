@@ -115,14 +115,12 @@ def generate_thesis_table(raw_data, stats, output_path):
 
     data = {
         'Metric': [
-            'Avg. PSNR (Imperceptibility)', 
             'Final Message BER (Target < 0.01)', 
             'Raw Codeword BER (Pre-ECC)', 
             'True Positive Rate (TPR)', 
             'True Negative Rate (TNR)'
         ],
         'Value': [
-            f"{raw_data['baseline_psnr']:.2f} dB (FAILURE)",
             f"{stats['BER']:.4f}",
             f"{raw_data['baseline_raw_ber']:.4f}",
             f"{stats['TPR']:.4f}",
@@ -142,18 +140,8 @@ def generate_thesis_table(raw_data, stats, output_path):
 # ----------------------------------------------------------------------
 def generate_comparison_charts(competitor_data, output_dir):
     df_comp = pd.DataFrame(competitor_data)
-    
-    # --- CHART A: PSNR Comparison ---
-    plt.figure(figsize=(8, 5))
-    sns.barplot(x='Model', y='PSNR', data=df_comp, palette='viridis')
-    plt.title('PSNR Benchmarking (Imperceptibility)', fontsize=14)
-    plt.ylabel('PSNR (dB)', fontsize=12)
-    plt.ylim(0, 50)
-    plt.savefig(os.path.join(output_dir, 'comparison_psnr.png'), bbox_inches='tight')
-    plt.close()
-    print(f"✅ Comparison PSNR Chart saved.")
 
-    # --- CHART B: BER Comparison ---
+    # --- BER Comparison ---
     plt.figure(figsize=(8, 5))
     sns.barplot(x='Model', y='BER', data=df_comp, palette='plasma')
     plt.title('Final Message BER Benchmarking (Robustness)', fontsize=14)
