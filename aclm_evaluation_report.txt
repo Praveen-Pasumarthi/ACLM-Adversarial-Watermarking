@@ -4,3 +4,32 @@
 Starting Evaluation over 3450 images.
 
 --- Running Attack Strength: 0.000 ---
+
+--- Running Attack Strength: 0.010 ---
+
+--- Running Attack Strength: 0.050 ---
+
+--- Running Attack Strength: 0.100 ---
+
+--- Running Attack Strength: 0.200 ---
+
+✅ Structured data saved to aclm_evaluation_data.json.
+
+==================================================
+            🏆 ACLM FINAL EVALUATION REPORT (Robustness Focus) 🏆
+==================================================
+
+I. BASELINE ROBUSTNESS (NO EXTERNAL NOISE)
+   -> Raw Codeword BER (448 bits): 0.0835
+   -> Final Message BER (256 bits): 0.0842
+
+III. ADVERSARIAL ROBUSTNESS BENCHMARK (BER vs. Simulated Noise)
+   (Data for Robustness Curve Graph)
+--------------------------------------------------
+Attack Strength Raw BER         Final BER      
+--------------------------------------------------
+0.01            0.0834          0.0842         
+0.05            0.0835          0.0844         
+0.10            0.0840          0.0847         
+0.20            0.0838          0.0843         
+--------------------------------------------------
