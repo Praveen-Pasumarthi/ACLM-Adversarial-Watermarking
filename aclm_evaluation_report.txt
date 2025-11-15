@@ -1,5 +1,6 @@
 📥 Loading pre-trained VAE from Stable Diffusion v1-5...
 ✅ Model loaded from aclm_final_model.pth (Fidelity metrics ignored).
-Starting Evaluation over 800 images.
+✅ DataLoader initialized. Total images loaded (DF2K): 3450
+Starting Evaluation over 3450 images.
 
 --- Running Attack Strength: 0.000 ---

@@ -43,3 +43,21 @@ if __name__ == '__main__':
     download_div2k_via_hub()
 
 # --- End of download_kaggle_dataset.py ---
+
+# --- New section for Flickr2K Download ---
+
+FLICKR2K_DATASET_ID = "aahmed01/flickr2k"
+FLICKR2K_PATH = "./data/Flickr2K"
+os.makedirs(FLICKR2K_PATH, exist_ok=True)
+
+print(f"📥 Downloading Flickr2K dataset ({FLICKR2K_DATASET_ID})...")
+try:
+    subprocess.run([
+        'python', '-m', 'kaggle', 'datasets', 'download', 
+        '-d', FLICKR2K_DATASET_ID, 
+        '-p', FLICKR2K_PATH, 
+        '--unzip'
+    ], check=True)
+    print("✅ Flickr2K download complete.")
+except subprocess.CalledProcessError as e:
+    print(f"❌ Error downloading Flickr2K: {e}")
