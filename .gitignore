@@ -9,5 +9,6 @@ data/
 
 # Ignore virtual environments (optional but recommended)
 venv/
+.venv/
 __pycache__/
 *.pyc
