@@ -1,6 +1,4 @@
 {
-    "baseline_psnr": NaN,
-    "baseline_lpips": 0.0,
     "baseline_raw_ber": 0.0834808526047762,
     "baseline_final_ber": 0.08416893115942028,
     "stats": null,
