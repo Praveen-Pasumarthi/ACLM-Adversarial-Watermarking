@@ -2,26 +2,20 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# --- Configuration Constants (Must be consistent across all files) ---
-M_BITS = 448 # Codeword length (Source 256 bits + Parity 192 bits)
+# --- Configuration Constants ---
+M_BITS = 448 
 Z_LATENT_CHANNELS = 4
 Z_LATENT_H = 32 
 Z_LATENT_W = 32 
 
-# The size of the flattened message map
-FLAT_MAP_SIZE = Z_LATENT_H * Z_LATENT_W # 1024
-
-# The size of the raw flattened latent input (for the simplified decoder)
-FLAT_SIZE_INPUT = Z_LATENT_CHANNELS * Z_LATENT_H * Z_LATENT_W # 4096
+FLAT_MAP_SIZE = Z_LATENT_H * Z_LATENT_W
+FLAT_SIZE_INPUT = Z_LATENT_CHANNELS * Z_LATENT_H * Z_LATENT_W
 
 # ----------------------------------------------------------------------
-#                           ACLM ENCODER (E) - (FIXED)
+#                           ACLM ENCODER (E)
 # ----------------------------------------------------------------------
 
 class ACLMEncoder(nn.Module):
-    """
-    Encoder (E): Embeds the Codeword (C) into the image latent vector (z).
-    """
     def __init__(self):
         super(ACLMEncoder, self).__init__()
         
@@ -29,7 +23,6 @@ class ACLMEncoder(nn.Module):
         self.message_map = nn.Sequential(
             nn.Linear(M_BITS, FLAT_MAP_SIZE),
             nn.LeakyReLU(0.2),
-            # CRITICAL FIX: BatchNorm1d forces the signal magnitude to a standard scale
             nn.BatchNorm1d(FLAT_MAP_SIZE), 
             nn.LeakyReLU(0.2),
         )
@@ -56,13 +49,10 @@ class ACLMEncoder(nn.Module):
         return z_tilde
 
 # ----------------------------------------------------------------------
-#                           ACLM DECODER (D) - (SIMPLIFIED)
+#                           ACLM DECODER (D)
 # ----------------------------------------------------------------------
 
 class ACLMDecoder(nn.Module):
-    """
-    Decoder (D): Simplified to linear layers for robust channel establishment.
-    """
     def __init__(self):
         super(ACLMDecoder, self).__init__()
         

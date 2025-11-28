@@ -14,7 +14,6 @@ accelerate
 hf_xet
 scikit-learn
 pandas
-matplotlib 
 seaborn
 tabulate
-lpips
+kagglehub

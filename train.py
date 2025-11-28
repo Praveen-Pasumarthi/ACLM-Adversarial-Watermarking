@@ -3,14 +3,10 @@ import torch.optim as optim
 import numpy as np
 import os
 from tqdm import tqdm
-# Import ECC components
 from ecc_utils import Hamming74, SOURCE_BITS, CODEWORD_BITS 
-# Ensure ACLM_Loss is imported correctly, assuming it's been updated in aclm_system.py
 from aclm_system import ACLMSystem, ACLM_Loss, M_BITS 
 from data_loader import get_data_loader 
 
-# --- Hyperparameters ---
-# Final stable configuration after tuning
 LEARNING_RATE_ED = 1e-4 
 LEARNING_RATE_A = 1e-5 
 NUM_EPOCHS = 10
@@ -19,16 +15,14 @@ IMAGE_HEIGHT = 256
 CHECKPOINT_FILENAME = "aclm_final_model.pth" 
 
 # ----------------------------------------------------------------------
-#                         UTILITY FUNCTIONS (UNCHANGED)
+#                         UTILITY FUNCTIONS
 # ----------------------------------------------------------------------
 
 def generate_random_message(batch_size, device):
-    """Generates a batch of random SOURCE_BITS (256) messages M."""
     M = torch.randint(0, 2, (batch_size, SOURCE_BITS)).float().to(device)
     return M
 
 def calculate_ber(M, M_hat):
-    """Calculates the Final Bit Error Rate (BER) between original message (M) and decoded message (M_hat)."""
     M_hat_binary = (M_hat > 0.5).float()
     
     incorrect_bits = torch.sum(torch.abs(M_hat - M)).item()
@@ -37,7 +31,6 @@ def calculate_ber(M, M_hat):
     return ber
 
 def save_checkpoint(model, optimizer_ed, optimizer_a, epoch, filename):
-    """Saves model and optimizer states."""
     torch.save({
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
@@ -47,11 +40,10 @@ def save_checkpoint(model, optimizer_ed, optimizer_a, epoch, filename):
     print(f"\n✅ Checkpoint saved to {filename} at Epoch {epoch}.")
 
 # ----------------------------------------------------------------------
-#                           TRAINING LOOP (FINAL)
+#                           TRAINING LOOP
 # ----------------------------------------------------------------------
 
 def train_aclm():
-    # Setup Device
     if torch.backends.mps.is_available():
         device = torch.device("mps")
     elif torch.cuda.is_available():
@@ -61,7 +53,6 @@ def train_aclm():
         
     print(f"Using device: {device}")
     
-    # Initialize Model and ECC Codec
     model = ACLMSystem(device=device) 
     ecc_codec = Hamming74(device=device) 
     train_loader, _ = get_data_loader()
@@ -83,20 +74,16 @@ def train_aclm():
         total_loss_ed = 0
         total_loss_a = 0
         total_ber = 0
-        
-        # Wrap the data loader to display epoch progress visually
         epoch_iterator = tqdm(train_loader, desc=f"Epoch {epoch}/{NUM_EPOCHS}", unit="batch")
         
         for batch_idx, x in enumerate(epoch_iterator):
             x = x.to(device)
             batch_size = x.size(0)
-            
-            # --- ECC INTEGRATION: Encode M into the longer codeword C ---
             M = generate_random_message(batch_size, device) 
             C = ecc_codec.encode(M) 
             
             # ---------------------------------------------------------
-            # STEP 1: TRAIN ADVERSARY (A) - MAXIMIZE CORRUPTION
+            # STEP 1: TRAIN ADVERSARY (A)
             # ---------------------------------------------------------
             
             with torch.no_grad():
@@ -104,9 +91,7 @@ def train_aclm():
                 C_tilde_detached = model.encoder(z, C).detach() 
             
             z_prime = model.adversary(C_tilde_detached)
-            C_hat_a = model.decoder(z_prime) 
-            
-            # FIX: ACLM_Loss simplified (only C and C_hat_a passed)
+            C_hat_a = model.decoder(z_prime)
             _, L_A_Total, _, _ = ACLM_Loss(C, C_hat_a) 
             
             optimizer_a.zero_grad()
@@ -115,7 +100,7 @@ def train_aclm():
             total_loss_a += L_A_Total.item()
             
             # ---------------------------------------------------------
-            # STEP 2: TRAIN ENCODER/DECODER (E/D) - MINIMIZE TOTAL LOSS
+            # STEP 2: TRAIN ENCODER/DECODER (E/D)
             # ---------------------------------------------------------
             
             for param in model.adversary.parameters():
@@ -124,13 +109,11 @@ def train_aclm():
             optimizer_ed.zero_grad() 
             
             with torch.no_grad():
-                z = model.vae.encode(x) # Z is input for Encoder
+                z = model.vae.encode(x)
             
             C_tilde = model.encoder(z, C) 
             z_prime = model.adversary(C_tilde) 
-            C_hat = model.decoder(z_prime) 
-            
-            # FIX: ACLM_Loss simplified (only C and C_hat passed)
+            C_hat = model.decoder(z_prime)
             L_E_D_Total, _, L_Fidelity, L_Recovery = ACLM_Loss(C, C_hat) 
             
             L_E_D_Total.backward() 
@@ -139,7 +122,6 @@ def train_aclm():
             for param in model.adversary.parameters():
                 param.requires_grad = True
             
-            # --- BER CALCULATION: Decode Noisy Codeword (C_hat) back to Message (M) ---
             M_hat_decoded = ecc_codec.decode_and_correct(C_hat.detach())
             
             total_loss_ed += L_E_D_Total.item()
@@ -148,7 +130,6 @@ def train_aclm():
             if (batch_idx + 1) % LOG_INTERVAL == 0:
                 avg_ber = total_ber / LOG_INTERVAL
                 
-                # Use tqdm's post-logging feature to print the metrics cleanly
                 epoch_iterator.write(
                     f"Epoch {epoch}/{NUM_EPOCHS} | Batch {(epoch - 1) * len(train_loader) + batch_idx + 1} | "
                     f"E/D Loss: {total_loss_ed/LOG_INTERVAL:.4f} | "
@@ -165,8 +146,6 @@ def train_aclm():
     # FINAL STEP: SAVE CHECKPOINT
     # ---------------------------------------------------------
     save_checkpoint(model, optimizer_ed, optimizer_a, NUM_EPOCHS, CHECKPOINT_FILENAME)
-    
-# --- Execution ---
 
 if __name__ == '__main__':
     train_aclm()
