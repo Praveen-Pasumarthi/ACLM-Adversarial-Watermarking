@@ -7,8 +7,8 @@ from skimage.metrics import peak_signal_noise_ratio as psnr_metric
 import sys 
 import io
 import json 
-import lpips 
 
+# --- Project Imports ---
 from aclm_system import ACLMSystem
 from data_loader import get_data_loader
 from ecc_utils import Hamming74, SOURCE_BITS 
@@ -16,12 +16,12 @@ from ecc_utils import calculate_ber
 from eval_utils import calculate_statistical_metrics, simulate_attack_noise
 
 CHECKPOINT_PATH = "aclm_final_model.pth"
-TEST_BATCH_SIZE = 32
+TEST_BATCH_SIZE = 32 # Safe batch size
 ATTACK_STRENGTHS = [0.00, 0.01, 0.05, 0.10, 0.20] 
 OUTPUT_JSON_FILE = "aclm_evaluation_data.json" 
 
 # ----------------------------------------------------------------------
-#                         UTILITY FUNCTIONS (UNCHANGED STUBS)
+#                         UTILITY FUNCTIONS (STUBS)
 # ----------------------------------------------------------------------
 def calculate_ssim(x_hat, x): return 0.0
 def calculate_psnr(x_hat, x): return 0.0
@@ -40,9 +40,10 @@ def evaluate_aclm(device):
     model.eval()
     
     try:
+        # Load weights safely (mapping to correct device)
         checkpoint = torch.load(CHECKPOINT_PATH, map_location=device)
         model.load_state_dict(checkpoint['model_state_dict'], strict=False) 
-        print(f"✅ Model loaded from {CHECKPOINT_PATH} (Fidelity metrics ignored).")
+        print(f"✅ Model loaded from {CHECKPOINT_PATH}")
     except FileNotFoundError:
         print(f"❌ Checkpoint file not found at {CHECKPOINT_PATH}. Exiting.")
         return
@@ -72,7 +73,19 @@ def evaluate_aclm(device):
                 M = torch.randint(0, 2, (batch_size, SOURCE_BITS)).float().to(device)
                 C = ecc_codec.encode(M)
                 
-                z = model.vae.encode(x)
+                # --- ROBUST VAE ACCESS (FIXED) ---
+                # Checks if model.vae is wrapped (like in visualize_output.py)
+                if hasattr(model.vae, 'vae'):
+                    vae_module = model.vae.vae
+                else:
+                    vae_module = model.vae
+                
+                # Encode -> Sample -> Scale
+                # This ensures we get the concrete tensor needed for the encoder
+                posterior = vae_module.encode(x).latent_dist
+                z = posterior.sample() * 0.18215
+                
+                # Inject Watermark
                 z_tilde = model.encoder(z, C)
                 
                 # 1. Simulate Attack
@@ -81,6 +94,7 @@ def evaluate_aclm(device):
                 else:
                     z_tilde_attacked = z_tilde 
                 
+                # Decode Message
                 z_prime = model.adversary(z_tilde_attacked) 
                 C_hat = model.decoder(z_prime)
                 
@@ -100,14 +114,13 @@ def evaluate_aclm(device):
                 
                 total_count += batch_size
 
-            
+        # Save stats for this attack strength
         benchmark_results[attack_strength] = {
             'Raw BER': total_ber_raw / total_count,
             'Final BER': total_ber_final / total_count
         }
 
     # 4. Final Reporting and JSON Structure Generation
-    
     if all_M_true and all_M_pred:
         dummy_true_pair = torch.tensor([[1.0, 0.0]], device='cpu') 
         dummy_pred_pair = torch.tensor([[1.0, 0.0]], device='cpu') 
@@ -143,12 +156,11 @@ def evaluate_aclm(device):
 
         json.dump(convert_numpy_types(final_report_data), f, indent=4)
     
-    # 6. PRINT REPORT TO CONSOLE/TEXT FILE
-    
+    # 6. PRINT REPORT TO CONSOLE
     print(f"\n✅ Structured data saved to {OUTPUT_JSON_FILE}.")
     
     print("\n" + "="*50)
-    print("            🏆 ACLM FINAL EVALUATION REPORT (Robustness Focus) 🏆")
+    print("            🏆 ACLM FINAL EVALUATION REPORT 🏆")
     print("="*50)
 
     # I. BASELINE ROBUSTNESS
@@ -158,16 +170,13 @@ def evaluate_aclm(device):
 
     # II. STATISTICAL BREAKDOWN
     if stats:
-        print("\nII. CONFUSION MATRIX & BIT RECOVERY STATS (POST-ECC DECODING)")
+        print("\nII. STATS (POST-ECC DECODING)")
         print(f"   True Positive Rate (TPR): {stats['TPR']:.4f}")
         print(f"   True Negative Rate (TNR): {stats['TNR']:.4f}")
-        print(f"   Final BER (Target < 0.01): {stats['BER']:.4f}")
-        print("\n   Confusion Matrix (True vs Predicted):")
-        print(f"   TN | FP\n   FN | TP\n   {np.array(stats['cm'])}")
+        print(f"   Final BER: {stats['BER']:.4f}")
     
     # III. ROBUSTNESS BENCHMARK
-    print("\nIII. ADVERSARIAL ROBUSTNESS BENCHMARK (BER vs. Simulated Noise)")
-    print("   (Data for Robustness Curve Graph)")
+    print("\nIII. ADVERSARIAL ROBUSTNESS BENCHMARK")
     print("-" * 50)
     print("{:<15} {:<15} {:<15}".format("Attack Strength", "Raw BER", "Final BER"))
     print("-" * 50)
@@ -177,12 +186,16 @@ def evaluate_aclm(device):
     print("-" * 50)
     
 if __name__ == '__main__':
+    # Robust Device Selection
     if torch.backends.mps.is_available():
         device = torch.device("mps")
+        print("🍎 Running on Apple Silicon (MPS)")
     elif torch.cuda.is_available():
         device = torch.device("cuda")
+        print("🚀 Running on NVIDIA GPU (CUDA)")
     else:
         device = torch.device("cpu")
+        print("🐢 Running on CPU")
         
     OUTPUT_FILE = "aclm_evaluation_report.txt"
     original_stdout = sys.stdout 

@@ -24,9 +24,7 @@ def generate_random_message(batch_size, device):
 
 def calculate_ber(M, M_hat):
     M_hat_binary = (M_hat > 0.5).float()
-    
     incorrect_bits = torch.sum(torch.abs(M_hat - M)).item()
-    
     ber = incorrect_bits / (M.size(0) * M.size(1))
     return ber
 
@@ -44,19 +42,22 @@ def save_checkpoint(model, optimizer_ed, optimizer_a, epoch, filename):
 # ----------------------------------------------------------------------
 
 def train_aclm():
-    if torch.backends.mps.is_available():
-        device = torch.device("mps")
-    elif torch.cuda.is_available():
+    if torch.cuda.is_available():
         device = torch.device("cuda")
+        print("🚀 Training on NVIDIA GPU (CUDA)")
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+        print("🍎 Training on Apple Silicon (MPS)")
     else:
         device = torch.device("cpu")
+        print("🐢 Training on CPU (Slow)")
         
-    print(f"Using device: {device}")
-    
+    # 2. Setup System
     model = ACLMSystem(device=device) 
     ecc_codec = Hamming74(device=device) 
     train_loader, _ = get_data_loader()
     
+    # 3. Optimizers
     optimizer_ed = optim.Adam(
         list(model.encoder.parameters()) + list(model.decoder.parameters()),
         lr=LEARNING_RATE_ED
@@ -87,7 +88,9 @@ def train_aclm():
             # ---------------------------------------------------------
             
             with torch.no_grad():
-                z = model.vae.encode(x)
+                posterior = model.vae.encode(x).latent_dist
+                z = posterior.sample() * 0.18215
+                
                 C_tilde_detached = model.encoder(z, C).detach() 
             
             z_prime = model.adversary(C_tilde_detached)
@@ -109,7 +112,8 @@ def train_aclm():
             optimizer_ed.zero_grad() 
             
             with torch.no_grad():
-                z = model.vae.encode(x)
+                posterior = model.vae.encode(x).latent_dist
+                z = posterior.sample() * 0.18215
             
             C_tilde = model.encoder(z, C) 
             z_prime = model.adversary(C_tilde) 
