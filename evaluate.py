@@ -100,13 +100,8 @@ def evaluate_aclm(device):
                 
                 total_count += batch_size
 
-        # 3. Store Results for this Attack Strength
-        avg_psnr = np.nan
-        avg_lpips = np.nan 
-        
+            
         benchmark_results[attack_strength] = {
-            'PSNR': avg_psnr,
-            'LPIPS': avg_lpips, 
             'Raw BER': total_ber_raw / total_count,
             'Final BER': total_ber_final / total_count
         }
@@ -126,8 +121,6 @@ def evaluate_aclm(device):
         stats = None
         
     final_report_data = {
-        'baseline_psnr': benchmark_results[0.0]['PSNR'],
-        'baseline_lpips': 0.0, 
         'baseline_raw_ber': benchmark_results[0.0]['Raw BER'],
         'baseline_final_ber': benchmark_results[0.0]['Final BER'],
         'stats': stats,
@@ -183,8 +176,6 @@ def evaluate_aclm(device):
         print("{:<15.2f} {:<15.4f} {:<15.4f}".format(strength, res['Raw BER'], res['Final BER']))
     print("-" * 50)
     
-
-
 if __name__ == '__main__':
     if torch.backends.mps.is_available():
         device = torch.device("mps")

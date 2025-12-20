@@ -16,7 +16,6 @@ NUM_IMAGES_TO_SHOW = 4
 SD_SCALING_FACTOR = 0.18215 
 
 def denormalize(tensor):
-    """Converts a [-1, 1] tensor back to [0, 1] for plotting, with robust clamping."""
     return torch.clamp((tensor + 1) / 2, 0, 1)
 
 def visualize_watermarking():
@@ -56,32 +55,26 @@ def visualize_watermarking():
         posterior = vae.encode(original_images).latent_dist
         z = posterior.sample()
 
-        # B. VAE Reconstruction (Baseline)
+        # B. VAE Reconstruction
         recon_output = vae.decode(z)
         reconstruction = recon_output.sample if hasattr(recon_output, 'sample') else recon_output
 
-        # C. Watermark Injection (NORMALIZED RESIDUAL)
-        # 1. Scale input for Encoder
         z_scaled = z * SD_SCALING_FACTOR
         
         # 2. Get Raw Watermark Signal
-        # This signal is currently too "loud" (high magnitude)
         raw_watermark = model.encoder(z_scaled, C)
         
         # 3. Calculate Magnitudes
-        # We calculate the average L2 norm (strength) of the latent vs the watermark
         z_norm = torch.norm(z_scaled.reshape(z_scaled.shape[0], -1), dim=1, keepdim=True)
         w_norm = torch.norm(raw_watermark.reshape(raw_watermark.shape[0], -1), dim=1, keepdim=True)
         
         # 4. Normalize Watermark to be relative to the Image Content
-        # We want the watermark to be epsilon * ImageStrength
-        epsilon = 0.08  # The "Stealth Factor". 0.08 = 8% perturbation (Visible but subtle). 
-                        # Lower this to 0.05 or 0.03 for "Invisible".
+        epsilon = 0.08
         
         # Avoid division by zero
         scale_factor = (epsilon * z_norm) / (w_norm + 1e-8)
         
-        # Reshape scale factor to broadcast: [B, 1, 1, 1]
+        # Reshape scale factor to broadcast
         scale_factor = scale_factor.view(-1, 1, 1, 1)
         
         # 5. Inject Scaled Watermark
@@ -104,19 +97,16 @@ def visualize_watermarking():
     fig, axes = plt.subplots(3, NUM_IMAGES_TO_SHOW, figsize=(15, 9))
     
     for i in range(NUM_IMAGES_TO_SHOW):
-        # Row 1: Original
         ax1 = axes[0, i]
         ax1.imshow(orig_cpu[i].permute(1, 2, 0).numpy()) 
         ax1.axis('off')
         if i == 0: ax1.set_title("Original Input", fontsize=14, loc='left')
-
-        # Row 2: VAE Reconstruction
+        
         ax2 = axes[1, i]
         ax2.imshow(recon_cpu[i].permute(1, 2, 0).numpy())
         ax2.axis('off')
         if i == 0: ax2.set_title("VAE Reconstruction (Baseline)", fontsize=14, loc='left')
 
-        # Row 3: Watermarked Output
         ax3 = axes[2, i]
         ax3.imshow(wat_cpu[i].permute(1, 2, 0).numpy())
         ax3.axis('off')
