@@ -11,7 +11,7 @@ from ecc_utils import Hamming74, SOURCE_BITS
 
 # --- CONFIGURATION ---
 CHECKPOINT_PATH = "aclm_final_model.pth"
-OUTPUT_IMAGE_FILE = "aclm_visual_proof_final.png" 
+OUTPUT_IMAGE_FILE = "aclm_visual.png" 
 NUM_IMAGES_TO_SHOW = 4
 SD_SCALING_FACTOR = 0.18215 
 
