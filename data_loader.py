@@ -13,7 +13,6 @@ NUM_WORKERS = 0
 # --- 1. Dataset (DF2K) ---
 
 class ACLMImageDataset(Dataset):
-    """Custom Dataset for loading the combined DF2K images (DIV2K + Flickr2K)."""
     def __init__(self, transform=None):
         
         # 1. Load files from DIV2K

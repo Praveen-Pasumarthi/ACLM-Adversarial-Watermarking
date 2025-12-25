@@ -1,10 +1,34 @@
 📥 Loading pre-trained VAE from Stable Diffusion v1-5...
 ✅ Model loaded from aclm_final_model.pth
 ✅ DataLoader initialized. Total images loaded (DF2K): 3450
-Starting Evaluation over 3450 images on cuda.
+Starting Evaluation over 3450 images on cpu.
 
 --- Running Attack Strength: 0.000 ---
 
 --- Running Attack Strength: 0.010 ---
 
 --- Running Attack Strength: 0.050 ---
+
+--- Running Attack Strength: 0.100 ---
+
+--- Running Attack Strength: 0.200 ---
+
+✅ Structured data saved to aclm_evaluation_data.json.
+
+==================================================
+            🏆 ACLM FINAL EVALUATION REPORT 🏆
+==================================================
+
+I. BASELINE ROBUSTNESS (NO EXTERNAL NOISE)
+   -> Raw Codeword BER (448 bits): 0.0831
+   -> Final Message BER (256 bits): 0.0840
+
+III. ADVERSARIAL ROBUSTNESS BENCHMARK
+--------------------------------------------------
+Attack Strength Raw BER         Final BER      
+--------------------------------------------------
+0.01            0.0835          0.0842         
+0.05            0.0836          0.0845         
+0.10            0.0836          0.0843         
+0.20            0.0843          0.0849         
+--------------------------------------------------

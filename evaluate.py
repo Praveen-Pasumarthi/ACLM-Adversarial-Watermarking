@@ -164,19 +164,12 @@ def evaluate_aclm(device):
     print("="*50)
 
     # I. BASELINE ROBUSTNESS
-    print("\nI. BASELINE ROBUSTNESS (NO EXTERNAL NOISE)")
+    print("\nBASELINE ROBUSTNESS (NO EXTERNAL NOISE)")
     print(f"   -> Raw Codeword BER (448 bits): {benchmark_results[0.0]['Raw BER']:.4f}")
     print(f"   -> Final Message BER (256 bits): {benchmark_results[0.0]['Final BER']:.4f}")
-
-    # II. STATISTICAL BREAKDOWN
-    if stats:
-        print("\nII. STATS (POST-ECC DECODING)")
-        print(f"   True Positive Rate (TPR): {stats['TPR']:.4f}")
-        print(f"   True Negative Rate (TNR): {stats['TNR']:.4f}")
-        print(f"   Final BER: {stats['BER']:.4f}")
     
     # III. ROBUSTNESS BENCHMARK
-    print("\nIII. ADVERSARIAL ROBUSTNESS BENCHMARK")
+    print("\nADVERSARIAL ROBUSTNESS BENCHMARK")
     print("-" * 50)
     print("{:<15} {:<15} {:<15}".format("Attack Strength", "Raw BER", "Final BER"))
     print("-" * 50)
@@ -206,9 +199,9 @@ if __name__ == '__main__':
             evaluate_aclm(device)
             
     except Exception as e:
-        print(f"\n❌ An error occurred during evaluation: {e}", file=original_stdout)
+        print(f"\nAn error occurred during evaluation: {e}", file=original_stdout)
         
     finally:
         sys.stdout = original_stdout 
     
-    print(f"\n✅ Evaluation complete. The full report has been saved to: {OUTPUT_FILE}")
+    print(f"\nEvaluation complete. The full report has been saved to: {OUTPUT_FILE}")
