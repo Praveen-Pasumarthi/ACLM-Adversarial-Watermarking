@@ -14,7 +14,7 @@ from data_loader import get_data_loader
 
 LEARNING_RATE_ED = 1e-4
 LEARNING_RATE_A = 1e-5
-NUM_EPOCHS = 10
+NUM_EPOCHS = 3
 LOG_INTERVAL = 100
 CHECKPOINT_FILENAME = "aclm_final_model.pth"
 
@@ -65,7 +65,8 @@ def train_aclm():
     # Setup system
     model = ACLMSystem(device=device)
     ecc_codec = Hamming74(device=device)
-    train_loader, _ = get_data_loader()
+    train_loader, train_dataset = get_data_loader(mode="train")
+
 
     # Optimizers
     optimizer_ed = optim.Adam(

@@ -4,79 +4,116 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from PIL import Image
 
-DIV2K_IMAGE_DIR = './data/DIV2K/DIV2K_train_HR/' 
-FLICKR2K_IMAGE_DIR = './data/Flickr2K/Flickr2K_HR/'
-IMAGE_SIZE = 256  
-BATCH_SIZE = 4
-NUM_WORKERS = 0 
+# ----------------------------------------------------------------------
+# DATASET PATHS
+# ----------------------------------------------------------------------
 
-# --- 1. Dataset (DF2K) ---
+TRAIN_DIRS = [
+    "./data/train/DIV2K/",
+    "./data/train/Flickr2K/",
+]
+
+TEST_DIRS = [
+    "./data/test/large_dataset/",
+]
+
+# Supported image formats (file-type neutral)
+IMAGE_EXTENSIONS = ("*.png", "*.jpg", "*.jpeg", "*.bmp", "*.webp")
+
+IMAGE_SIZE = 256
+BATCH_SIZE = 4
+NUM_WORKERS = 0
+
+# ----------------------------------------------------------------------
+# DATASET CLASS
+# ----------------------------------------------------------------------
 
 class ACLMImageDataset(Dataset):
-    def __init__(self, transform=None):
-        
-        # 1. Load files from DIV2K
-        div2k_files = []
-        if os.path.exists(DIV2K_IMAGE_DIR):
-            # Recursively find all PNG files
-            div2k_files = [f for f in glob(os.path.join(DIV2K_IMAGE_DIR, '**', '*.png'), recursive=True)]
-        
-        # 2. Load files from Flickr2K
-        flickr2k_files = []
-        if os.path.exists(FLICKR2K_IMAGE_DIR):
-            flickr2k_files = [f for f in glob(os.path.join(FLICKR2K_IMAGE_DIR, '**', '*.png'), recursive=True)]
-        
-        # 3. Combine both lists (DF2K Dataset)
-        self.image_files = div2k_files + flickr2k_files
+    def __init__(self, roots, transform=None):
+
+        self.image_files = []
+
+        for root in roots:
+            if os.path.exists(root):
+                for ext in IMAGE_EXTENSIONS:
+                    self.image_files.extend(
+                        glob(os.path.join(root, "**", ext), recursive=True)
+                    )
 
         if not self.image_files:
-            raise FileNotFoundError("No PNG images found in either DIV2K or Flickr2K directories. Total Images: 0.")
-        
-        print(f"✅ DataLoader initialized. Total images loaded (DF2K): {len(self.image_files)}")
-        
+            raise FileNotFoundError(
+                "No images found in the specified dataset directories."
+            )
+
+        print(f" DataLoader initialized. Total images loaded: {len(self.image_files)}")
+
         self.transform = transform
-        
+
     def __len__(self):
         return len(self.image_files)
-    
+
     def __getitem__(self, idx):
         img_path = self.image_files[idx]
-        image = Image.open(img_path).convert('RGB')
-        
+        image = Image.open(img_path).convert("RGB")
+
         if self.transform:
             image = self.transform(image)
-            
+
         return image
 
-# --- 2. Data Transformations and Loader Factory ---
+# ----------------------------------------------------------------------
+# DATALOADER FACTORY
+# ----------------------------------------------------------------------
 
-def get_data_loader(batch_size=BATCH_SIZE, num_workers=NUM_WORKERS):
-   
-    
+def get_data_loader(mode="train", batch_size=BATCH_SIZE, num_workers=NUM_WORKERS):
+
+    if mode == "train":
+        roots = TRAIN_DIRS
+    elif mode == "test":
+        roots = TEST_DIRS
+    else:
+        raise ValueError("mode must be either 'train' or 'test'")
+
     data_transforms = transforms.Compose([
-        transforms.Resize(IMAGE_SIZE), 
-        transforms.CenterCrop(IMAGE_SIZE), 
-        transforms.ToTensor(), 
-        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]) 
+        transforms.Resize(IMAGE_SIZE),
+        transforms.CenterCrop(IMAGE_SIZE),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[0.5, 0.5, 0.5],
+            std=[0.5, 0.5, 0.5]
+        ),
     ])
-    dataset = ACLMImageDataset(transform=data_transforms)
-    
+
+    dataset = ACLMImageDataset(
+        roots=roots,
+        transform=data_transforms,
+    )
+
     data_loader = DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=(mode == "train"),
         num_workers=num_workers,
-        pin_memory=False
+        pin_memory=False,
     )
-    
+
     return data_loader, dataset
 
-if __name__ == '__main__':
+# ----------------------------------------------------------------------
+# DEBUG TEST
+# ----------------------------------------------------------------------
+
+if __name__ == "__main__":
     try:
-        loader, ds = get_data_loader()
-        print(f"Total batches: {len(loader)}")
-        for batch_idx, images in enumerate(loader):
-            print(f"Sample Batch Shape: {images.shape}")
+        loader, ds = get_data_loader(mode="train")
+        print(f"Training batches: {len(loader)}")
+
+        loader, ds = get_data_loader(mode="test")
+        print(f"Testing batches: {len(loader)}")
+
+        for images in loader:
+            print(f"Sample batch shape: {images.shape}")
             break
+
     except FileNotFoundError as e:
         print(f"Error during test run: {e}")

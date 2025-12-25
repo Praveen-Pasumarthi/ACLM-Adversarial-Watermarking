@@ -1,7 +1,10 @@
+import os
+# Force CPU for consistency (optional for viz, but safe)
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1" 
+
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 from torchvision.utils import make_grid
 
 # --- Project Imports ---
@@ -11,7 +14,7 @@ from ecc_utils import Hamming74, SOURCE_BITS
 
 # --- CONFIGURATION ---
 CHECKPOINT_PATH = "aclm_final_model.pth"
-OUTPUT_IMAGE_FILE = "aclm_visual.png" 
+OUTPUT_IMAGE_FILE = "aclm_visual_proof_final.png" 
 NUM_IMAGES_TO_SHOW = 4
 SD_SCALING_FACTOR = 0.18215 
 
@@ -22,25 +25,15 @@ def denormalize(tensor):
     return torch.clamp((tensor + 1) / 2, 0, 1)
 
 def visualize_watermarking():
-    # ---------------------------------------------------------
-    # 1. ROBUST DEVICE SELECTION (Mac / Windows / Linux)
-    # ---------------------------------------------------------
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-        print("🚀 Running on NVIDIA GPU (CUDA)")
-    elif torch.backends.mps.is_available():
-        device = torch.device("mps")
-        print("🍎 Running on Apple Silicon (MPS)")
-    else:
-        device = torch.device("cpu")
-        print("🐢 Running on CPU")
+    # Force CPU to match your other scripts
+    device = torch.device("cpu")
+    print(f"Generating visuals on {device} (using Test Dataset)...")
 
-    # 2. Load Model
+    # 1. Load Model
     model = ACLMSystem(device=device) 
     model.eval()
     
     try:
-        # map_location ensures weights loaded on Mac don't crash looking for CUDA
         checkpoint = torch.load(CHECKPOINT_PATH, map_location=device)
         model.load_state_dict(checkpoint['model_state_dict'], strict=False)
         print(f"✅ Model loaded from {CHECKPOINT_PATH}")
@@ -48,28 +41,32 @@ def visualize_watermarking():
         print(f"❌ Checkpoint {CHECKPOINT_PATH} not found.")
         return
 
-    # 3. Get Data
-    loader, _ = get_data_loader(batch_size=NUM_IMAGES_TO_SHOW, num_workers=0)
+    # 2. Get Data (UPDATED: Uses mode='test')
+    # We use mode='test' to prove the model works on unseen images
+    loader, _ = get_data_loader(mode="test", batch_size=NUM_IMAGES_TO_SHOW, num_workers=0)
     data_iter = iter(loader)
     original_images = next(data_iter).to(device)
 
-    # 4. Prepare Watermark
+    # 3. Prepare Watermark
     ecc_codec = Hamming74(device=device)
     M = torch.randint(0, 2, (NUM_IMAGES_TO_SHOW, SOURCE_BITS)).float().to(device)
     C = ecc_codec.encode(M) 
 
-    # 5. Process
+    # 4. Process
     with torch.no_grad():
+        # Robust VAE Access
         if hasattr(model.vae, 'vae'):
             vae = model.vae.vae
         else:
             vae = model.vae
 
-        # A. Encode to Raw Latents (MAC FIX APPLIED)
-        # We explicitly sample the distribution to get a concrete Tensor for MPS
-        posterior = vae.encode(original_images).latent_dist
-        z = posterior.sample()
-
+        # A. Encode to Raw Latents
+        encoder_out = vae.encode(original_images)
+        if hasattr(encoder_out, "latent_dist"):
+             z = encoder_out.latent_dist.sample()
+        else:
+             z = encoder_out
+        
         # B. Baseline Reconstruction
         recon_output = vae.decode(z)
         reconstruction = recon_output.sample if hasattr(recon_output, 'sample') else recon_output
@@ -94,10 +91,9 @@ def visualize_watermarking():
         watermarked_output = vae.decode(z_final)
         watermarked_images = watermarked_output.sample if hasattr(watermarked_output, 'sample') else watermarked_output
 
-    # 6. Visualization
+    # 5. Visualization
     print("Creating comparison grid...")
     
-    # Move to CPU for plotting (Matplotlib requires CPU)
     orig_cpu = denormalize(original_images).cpu()
     recon_cpu = denormalize(reconstruction).cpu()
     wat_cpu = denormalize(watermarked_images).cpu()
@@ -108,7 +104,7 @@ def visualize_watermarking():
         # Original
         axes[0, i].imshow(orig_cpu[i].permute(1, 2, 0).numpy()) 
         axes[0, i].axis('off')
-        if i == 0: axes[0, i].set_title("Original", fontsize=14, loc='left')
+        if i == 0: axes[0, i].set_title("Original (Test Set)", fontsize=14, loc='left')
 
         # Reconstruction
         axes[1, i].imshow(recon_cpu[i].permute(1, 2, 0).numpy())
