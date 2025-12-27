@@ -1,32 +1,32 @@
 {
-    "baseline_raw_ber": 0.08313211710124777,
-    "baseline_final_ber": 0.08398663949275362,
+    "baseline_raw_ber": 0.07644955371618271,
+    "baseline_final_ber": 0.076315625,
     "stats": null,
     "robustness_benchmark": [
         {
             "strength": 0.0,
-            "raw_ber": 0.08313211710124777,
-            "final_ber": 0.08398663949275362
+            "raw_ber": 0.07644955371618271,
+            "final_ber": 0.076315625
         },
         {
             "strength": 0.01,
-            "raw_ber": 0.0835073759244836,
-            "final_ber": 0.08421648550724638
+            "raw_ber": 0.07657522308826446,
+            "final_ber": 0.076237109375
         },
         {
             "strength": 0.05,
-            "raw_ber": 0.08358113387356633,
-            "final_ber": 0.084453125
+            "raw_ber": 0.07650312494039535,
+            "final_ber": 0.075925
         },
         {
             "strength": 0.1,
-            "raw_ber": 0.08364971517220787,
-            "final_ber": 0.08426630434782609
+            "raw_ber": 0.07640915182828903,
+            "final_ber": 0.0762296875
         },
         {
             "strength": 0.2,
-            "raw_ber": 0.08429218395464662,
-            "final_ber": 0.08488451086956522
+            "raw_ber": 0.0768299106836319,
+            "final_ber": 0.07681953125
         }
     ]
 }
