@@ -29,8 +29,8 @@ st.subheader("Thesis Report Outputs")
 output_images = glob.glob("report_outputs/*.png")
 
 if output_images:
-    cols = st.columns(4)
-    for idx, img_path in enumerate(output_images[:4]):
+    cols = st.columns(len(output_images))
+    for idx, img_path in enumerate(output_images):
         with cols[idx]:
             img = Image.open(img_path)
             st.image(img, width='stretch')
